@@ -1,9 +1,33 @@
 # Associate users with permissions and roles
 
+
+### Sponsor
+
+<table>
+   <tr>
+      <td><img src="http://spatie.github.io/laravel-permission/sponsor-logo.png"></td>
+      <td>If you want to quickly add authentication and authorization to Laravel projects, feel free to check Auth0's Laravel SDK and free plan at <a href="https://auth0.com/overview?utm_source=GHsponsor&utm_medium=GHsponsor&utm_campaign=laravel-permission&utm_content=auth">https://auth0.com/overview</a>.</td>
+   </tr>
+</table>
+
+
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/spatie/laravel-permission.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-permission)
 [![Build Status](https://img.shields.io/travis/spatie/laravel-permission/master.svg?style=flat-square)](https://travis-ci.org/spatie/laravel-permission)
 [![StyleCI](https://styleci.io/repos/42480275/shield)](https://styleci.io/repos/42480275)
 [![Total Downloads](https://img.shields.io/packagist/dt/spatie/laravel-permission.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-permission)
+
+* [Installation](#installation)
+* [Usage](#usage)
+  * [Using "direct" permissions](#using-direct-permissions-see-below-to-use-both-roles-and-permissions)
+  * [Using permissions via roles](#using-permissions-via-roles)
+  * [Using Blade directives](#using-blade-directives)
+  * [Using multiple guards](#using-multiple-guards)
+  * [Using a middleware](#using-a-middleware)
+  * [Using artisan commands](#using-artisan-commands)
+* [Unit Testing](#unit-testing)
+* [Database Seeding](#database-seeding)
+* [Extending](#extending)
+* [Cache](#cache)
 
 This package allows you to manage user permissions and roles in a database.
 
@@ -27,10 +51,15 @@ Because all permissions will be registered on [Laravel's gate](https://laravel.c
 $user->can('edit articles');
 ```
 
-Spatie is webdesign agency in Antwerp, Belgium. You'll find an overview of all
+Spatie is a web design agency in Antwerp, Belgium. You'll find an overview of all
 our open source projects [on our website](https://spatie.be/opensource).
 
 ## Installation
+
+- [Laravel](#laravel)
+- [Lumen](#lumen)
+
+### Laravel
 
 This package can be used in Laravel 5.4 or higher. If you are using an older version of Laravel, take a look at [the v1 branch of this package](https://github.com/spatie/laravel-permission/tree/v1).
 
@@ -53,6 +82,13 @@ You can publish [the migration](https://github.com/spatie/laravel-permission/blo
 
 ```bash
 php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --tag="migrations"
+```
+
+If you're using UUIDs or GUIDs for your `User` models you can update the `create_permission_tables.php` migration and replace `$table->morphs('model')` with:
+
+```php
+$table->uuid('model_id');
+$table->string('model_type');
 ```
 
 After the migration has been published you can create the role- and permission-tables by running the migrations:
@@ -147,21 +183,64 @@ return [
      */
 
     'cache_expiration_time' => 60 * 24,
-
+    
     /*
-     * By default we'll make an entry in the application log when the permissions
-     * could not be loaded. Normally this only occurs while installing the packages.
-     *
-     * If for some reason you want to disable that logging, set this value to false.
+     * When set to true, the required permission/role names are added to the exception
+     * message. This could be considered an information leak in some contexts, so
+     * the default setting is false here for optimum safety.
      */
 
-    'log_registration_exception' => true,
+    'display_permission_in_exception' => false,
 ];
+```
+
+### Lumen
+
+You can install the package via Composer:
+
+``` bash
+composer require spatie/laravel-permission
+```
+
+Copy the required files:
+
+```bash
+cp vendor/spatie/laravel-permission/config/permission.php config/permission.php
+cp vendor/spatie/laravel-permission/database/migrations/create_permission_tables.php.stub database/migrations/2018_01_01_000000_create_permission_tables.php
+```
+
+You will also need to create another configuration file at `config/auth.php`. Get it on the Laravel repository or just run the following command:
+
+```bash
+curl -Ls https://raw.githubusercontent.com/laravel/lumen-framework/5.5/config/auth.php -o config/auth.php
+```
+
+Now, run your migrations:
+
+```bash
+php artisan migrate
+```
+
+Then, in `bootstrap/app.php`, register the middlewares:
+
+```php
+$app->routeMiddleware([
+    'auth'       => App\Http\Middleware\Authenticate::class,
+    'permission' => Spatie\Permission\Middlewares\PermissionMiddleware::class,
+    'role'       => Spatie\Permission\Middlewares\RoleMiddleware::class,
+]);
+```
+
+As well as the configuration and the service provider:
+
+```php
+$app->configure('permission');
+$app->register(Spatie\Permission\PermissionServiceProvider::class);
 ```
 
 ## Usage
 
-First add the `Spatie\Permission\Traits\HasRoles` trait to your `User` model(s):
+First, add the `Spatie\Permission\Traits\HasRoles` trait to your `User` model(s):
 
 ```php
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -200,6 +279,28 @@ use Spatie\Permission\Models\Permission;
 
 $role = Role::create(['name' => 'writer']);
 $permission = Permission::create(['name' => 'edit articles']);
+```
+
+
+A permission can be assigned to a role using 1 of these methods:
+
+```php
+$role->givePermissionTo($permission);
+$permission->assignRole($role);
+```
+
+Multiple permissions can be synced to a role using 1 of these methods:
+
+```php
+$role->syncPermissions($permissions);
+$permission->syncRoles($roles);
+```
+
+A permission can be removed from a role using 1 of these methods:
+
+```php
+$role->revokePermissionTo($permission);
+$permission->removeRole($role);
 ```
 
 If you're using multiple guards the `guard_name` attribute needs to be set as well. Read about it in the [using multiple guards](#using-multiple-guards) section of the readme.
@@ -360,7 +461,7 @@ $user->assignRole('writer');
 $user->givePermissionTo('delete articles');
 ```
 
-In the above example a role is given permission to edit articles and this role is assigned to a user. 
+In the above example, a role is given permission to edit articles and this role is assigned to a user. 
 Now the user can edit articles and additionally delete articles. The permission of 'delete articles' is the user's direct permission because it is assigned directly to them.
 When we call `$user->hasDirectPermission('delete articles')` it returns `true`, 
 but `false` for `$user->hasDirectPermission('edit articles')`.
@@ -457,11 +558,11 @@ or
 
 When using the default Laravel auth configuration all of the above methods will work out of the box, no extra configuration required.
 
-However when using multiple guards they will act like namespaces for your permissions and roles. Meaning every guard has its own set of permissions and roles that can be assigned to their user model.
+However, when using multiple guards they will act like namespaces for your permissions and roles. Meaning every guard has its own set of permissions and roles that can be assigned to their user model.
 
 ### Using permissions and roles with multiple guards
 
-By default the default guard (`config('auth.default.guard')`) will be used as the guard for new permissions and roles. When creating permissions and roles for specific guards you'll have to specify their `guard_name` on the model:
+By default the default guard (`config('auth.defaults.guard')`) will be used as the guard for new permissions and roles. When creating permissions and roles for specific guards you'll have to specify their `guard_name` on the model:
 
 ```php
 // Create a superadmin role for the admin users
@@ -545,16 +646,31 @@ public function __construct()
 }
 ```
 
+### Catching role and permission failures
+If you want to override the default `403` response, you can catch the `UnauthorizedException` using your app's exception handler:
+
+```php
+public function render($request, Exception $exception)
+{
+    if ($exception instanceof \Spatie\Permission\Exceptions\UnauthorizedException) {
+        // Code here ...
+    }
+
+    return parent::render($request, $exception);
+}
+
+```
+
 ## Using artisan commands
 
-You can create a role or permission from console with artisan commands.
+You can create a role or permission from a console with artisan commands.
 
 ```bash
 php artisan permission:create-role writer
 ```
 
 ```bash
-php artisan permission:create-permission 'edit articles'
+php artisan permission:create-permission "edit articles"
 ```
 
 When creating permissions and roles for specific guards you can specify the guard names as a second argument:
@@ -564,7 +680,7 @@ php artisan permission:create-role writer web
 ```
 
 ```bash
-php artisan permission:create-permission 'edit articles' web
+php artisan permission:create-permission "edit articles" web
 ```
 
 ## Unit Testing
@@ -588,7 +704,7 @@ Two notes about Database Seeding:
 
 1. It is best to flush the `spatie.permission.cache` before seeding, to avoid cache conflict errors. This can be done from an Artisan command (see Troubleshooting: Cache section, later) or directly in a seeder class (see example below).
 
-2. Here's a sample seeder, which clears the cache, creates permissions, and then assigns permissions to roles:
+2. Here's a sample seeder, which clears the cache, creates permissions and then assigns permissions to roles:
 
 	```php
 	use Illuminate\Database\Seeder;
@@ -623,19 +739,23 @@ Two notes about Database Seeding:
 
 ## Extending
 
-If you need to extend or replace the existing `Role` or `Permission` models you just need to
-keep the following things in mind:
+If you need to EXTEND the existing `Role` or `Permission` models note that:
+
+- Your `Role` model needs to extend the `Spatie\Permission\Models\Role` model
+- Your `Permission` model needs to extend the `Spatie\Permission\Models\Permission` model
+
+If you need to REPLACE the existing `Role` or `Permission` models you need to keep the
+following things in mind:
 
 - Your `Role` model needs to implement the `Spatie\Permission\Contracts\Role` contract
 - Your `Permission` model needs to implement the `Spatie\Permission\Contracts\Permission` contract
-- You can publish the configuration with this command:
+
+In BOTH cases, whether extending or replacing, you will need to specify your new models in the configuration. To do this you must update the `models.role` and `models.permission` values in the configuration file after publishing the configuration with this command:
 
 ```bash
 php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider" --tag="config"
 ```
-  
-  And update the `models.role` and `models.permission` values
-
+ 
 
 ## Cache
 
@@ -650,6 +770,9 @@ $user->syncRoles(params);
 $role->givePermissionTo('edit articles');
 $role->revokePermissionTo('edit articles');
 $role->syncPermissions(params);
+$permission->assignRole('writer');
+$permission->removeRole('writer');
+$permission->syncRoles(params);
 ```
 
 HOWEVER, if you manipulate permission/role data directly in the database instead of calling the supplied methods, then you will not see the changes reflected in the application unless you manually reset the cache.
@@ -688,7 +811,7 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
 
 ### Security
 
-If you discover any security related issues, please email [freek@spatie.be](mailto:freek@spatie.be) instead of using the issue tracker.
+If you discover any security-related issues, please email [freek@spatie.be](mailto:freek@spatie.be) instead of using the issue tracker.
 
 ## Postcardware
 
@@ -715,11 +838,11 @@ Special thanks to [Alex Vanderbist](https://github.com/AlexVanderbist) who great
 
 ## Alternatives
 
-[Povilas Korop](https://twitter.com/@povilaskorop) did an excellent job listing the alternatives [in an article on Laravel News](https://laravel-news.com/two-best-roles-permissions-packages). In that same article he compares laravel-permission to [Joseph Silber](https://github.com/JosephSilber)'s [Bouncer]((https://github.com/JosephSilber/bouncer)), which in our book is also an excellent package.
+[Povilas Korop](https://twitter.com/@povilaskorop) did an excellent job listing the alternatives [in an article on Laravel News](https://laravel-news.com/two-best-roles-permissions-packages). In that same article, he compares laravel-permission to [Joseph Silber](https://github.com/JosephSilber)'s [Bouncer]((https://github.com/JosephSilber/bouncer)), which in our book is also an excellent package.
 
 ## Support us
 
-Spatie is a webdesign agency based in Antwerp, Belgium. You'll find an overview of all our open source projects [on our website](https://spatie.be/opensource).
+Spatie is a web design agency based in Antwerp, Belgium. You'll find an overview of all our open source projects [on our website](https://spatie.be/opensource).
 
 Does your business depend on our contributions? Reach out and support us on [Patreon](https://www.patreon.com/spatie). 
 All pledges will be dedicated to allocating workforce on maintenance and new awesome stuff.
