@@ -366,10 +366,24 @@ You can test if a user has a permission:
 $user->hasPermissionTo('edit articles');
 ```
 
+Or you may pass an integer representing the permission id
+
+```php
+$user->hasPermissionTo('1');
+$user->hasPermissionTo(Permission::find(1)->id);
+$user->hasPermissionTo($somePermission->id);
+```
+
 ...or if a user has multiple permissions:
 
 ```php
 $user->hasAnyPermission(['edit articles', 'publish articles', 'unpublish articles']);
+```
+
+You may also pass integers to lookup by permission id
+
+```php
+$user->hasAnyPermission(['edit articles', 1, 5]);
 ```
 
 Saved permissions will be registered with the `Illuminate\Auth\Access\Gate` class for the default guard. So you can
@@ -706,35 +720,36 @@ Two notes about Database Seeding:
 
 2. Here's a sample seeder, which clears the cache, creates permissions and then assigns permissions to roles:
 
-	```php
-	use Illuminate\Database\Seeder;
-	use Spatie\Permission\Models\Role;
-	use Spatie\Permission\Models\Permission;
+    ```php
+    use Illuminate\Database\Seeder;
+    use Spatie\Permission\Models\Role;
+    use Spatie\Permission\Models\Permission;
 
-	class RolesAndPermissionsSeeder extends Seeder
-	{
-	    public function run()
-    	{
-        	// Reset cached roles and permissions
-	        app()['cache']->forget('spatie.permission.cache');
+    class RolesAndPermissionsSeeder extends Seeder
+    {
+        public function run()
+        {
+            // Reset cached roles and permissions
+            app()['cache']->forget('spatie.permission.cache');
 
-	        // create permissions
-	        Permission::create(['name' => 'edit articles']);
-	        Permission::create(['name' => 'delete articles']);
-	        Permission::create(['name' => 'publish articles']);
-	        Permission::create(['name' => 'unpublish articles']);
+            // create permissions
+            Permission::create(['name' => 'edit articles']);
+            Permission::create(['name' => 'delete articles']);
+            Permission::create(['name' => 'publish articles']);
+            Permission::create(['name' => 'unpublish articles']);
 
-	        // create roles and assign existing permissions
-	        $role = Role::create(['name' => 'writer']);
-	        $role->givePermissionTo('edit articles');
-	        $role->givePermissionTo('delete articles');
+            // create roles and assign created permissions
 
-	        $role = Role::create(['name' => 'admin']);
-	        $role->givePermissionTo('publish articles');
-	        $role->givePermissionTo('unpublish articles');
-	    }
-	}
+            $role = Role::create(['name' => 'writer']);
+            $role->givePermissionTo('edit articles');
 
+            $role = Role::create(['name' => 'moderator']);
+            $role->givePermissionTo(['publish articles', 'unpublish articles']);
+
+            $role = Role::create(['name' => 'super-admin']);
+            $role->givePermissionTo(Permission::all());
+        }
+    }
 	```
 
 ## Extending
